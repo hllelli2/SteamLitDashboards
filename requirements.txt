@@ -1,0 +1,10 @@
+shtab>=1.6.5
+pandas>=2.1.3
+pontos>=22.10.0
+autohooks-plugin-black>=23.10.0
+autohooks-plugin-ruff>=23.10.0
+autohooks-plugin-mypy>=23.10.0
+coverage>=7.2.7
+requests>=2.31.0
+pyarrow>=12.0.0
+seaborn>=0.12.2

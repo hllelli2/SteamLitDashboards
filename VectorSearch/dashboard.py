@@ -62,7 +62,7 @@ def load_data(file_paths):
     return combined_df
 
 
-@st.cache_data
+# @st.cache_data
 def condense_data(df):
     # keep the Gene ID organism, Sourc_File, best_match_value, search_term, best_match_id and best_match_score columns
     condensed_df = df[

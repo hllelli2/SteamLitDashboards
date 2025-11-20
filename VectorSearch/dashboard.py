@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import pyarrow.dataset as ds
 from pathlib import Path
+
 
 st.title("Matching VPDB Product Descriptions From Databases")
 
@@ -29,34 +31,35 @@ SOURCE_FILE_TEXT_MAP = {
     "SFLD.tsv": "SFLD",
 }
 
+# -------------------------------------
+#  SAFE, SCALABLE PARQUET LOADING
+# -------------------------------------
 
-# ------------------------------
-# SAFE CACHING FUNCTIONS
-# ------------------------------
+REQUIRED_COLS = [
+    "Gene ID",
+    "Organism",
+    "Source_File",
+    "best_match_value",
+    "search_term",
+    "best_match_id",
+    "best_match_score",
+]
 
 
-@st.cache_data(show_spinner="Loading data…")
-def load_data(file_paths):
-    """Load and concatenate multiple parquet files safely."""
-    df_list = []
-    for fp in file_paths:
-        df_list.append(pd.read_parquet(fp))
-    return pd.concat(df_list, ignore_index=True)
+@st.cache_resource(show_spinner="Loading Parquet dataset…")
+def load_data(folder):
+    """
+    Load all Parquet files from a folder using pyarrow.dataset.
+    """
+    parquet_files = list(folder.glob("*.parquet"))
+    dataset = ds.dataset(parquet_files, format="parquet")
+    table = dataset.to_table(columns=REQUIRED_COLS)  # load only needed columns
+    return table.to_pandas()
 
 
 @st.cache_data(show_spinner="Condensing data…")
 def condense_data(df):
-    """Keep required columns and map clean source names."""
-    cols = [
-        "Gene ID",
-        "Organism",
-        "Source_File",
-        "best_match_value",
-        "search_term",
-        "best_match_id",
-        "best_match_score",
-    ]
-    condensed = df[cols].copy()
+    condensed = df.copy()
 
     condensed["Source_File"] = (
         condensed["Source_File"]
@@ -68,8 +71,6 @@ def condense_data(df):
 
 @st.cache_data(show_spinner="Computing chart…")
 def make_match_bin_chart(condensed_df, selected_org):
-    """Generate stacked bar chart & cache the figure safely."""
-
     if selected_org != "All":
         df_sub = condensed_df[condensed_df["Organism"] == selected_org]
     else:
@@ -125,7 +126,6 @@ def make_match_bin_chart(condensed_df, selected_org):
 
 
 def sample_dataframe(condensed_df, selected_org, selected_source):
-    """Return a small sample for display."""
     df_sub = condensed_df
 
     if selected_org != "All":
@@ -149,20 +149,14 @@ def sample_dataframe(condensed_df, selected_org, selected_source):
     return df_sub.set_index("Gene ID")
 
 
-# ------------------------------
-# MAIN APP
-# ------------------------------
-
-
 def app():
-    # Cloud-safe: show something immediately so health checks pass
     st.write("Preparing application…")
 
-    input_data_dir = Path(__file__).parent.parent / "input_data"
-    file_paths = list((input_data_dir / "vs_tsvs").glob("*.parquet"))
+    input_data_dir = Path(__file__).parent.parent / "input_data" / "vs_tsvs"
 
-    df = load_data(file_paths)
-    st.write(f"Loaded {len(df):,} records from {len(file_paths)} files.")
+    # ---- LOAD USING PYARROW ----
+    df = load_data(input_data_dir)
+    st.write(f"Loaded {len(df):,} rows.")
 
     condensed_df = condense_data(df)
 
@@ -173,7 +167,9 @@ def app():
 
     with col2:
         organisms = sorted(condensed_df["Organism"].unique())
-        selected_org = st.selectbox("Select Organism", ["All"] + organisms)
+        selected_org = st.selectbox(
+            "Select Organism", ["All"] + organisms, key="organism_select"
+        )
 
     with col1:
         fig = make_match_bin_chart(condensed_df, selected_org)
@@ -186,7 +182,9 @@ def app():
 
     with col2:
         sources = sorted(condensed_df["Source_File"].unique())
-        selected_source = st.selectbox("Select Source", ["All"] + sources)
+        selected_source = st.selectbox(
+            "Select Source", ["All"] + sources, key="source_select"
+        )
 
     with col1:
         sampled_df = sample_dataframe(condensed_df, selected_org, selected_source)
@@ -197,5 +195,4 @@ def app():
         st.dataframe(sampled_df)
 
 
-# Run the app
-app()
+# app()
